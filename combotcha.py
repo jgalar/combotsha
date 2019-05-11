@@ -51,6 +51,7 @@ class IRCSession:
         print('Connecting to {}...'.format(server_url))
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((server_url, server_port))
+        self._sock_send_lock = threading.Lock()
         self._sock = sock
         self._channel = channel_name
         self._status_pattern = re.compile('^.* ([0-9][0-9][0-9]) .*')
@@ -59,7 +60,11 @@ class IRCSession:
 
     def _send_command(self, cmd_name, cmd_payload):
         payload = '{} {}\r\n'.format(cmd_name, cmd_payload).encode('utf-8')
-        self._sock.send(payload)
+        self._sock_send_lock.acquire()
+        try:
+            self._sock.send(payload)
+        finally:
+            self._sock_send_lock.release()
 
     def _identify(self, nickname):
         print('Identifying as ' + nickname)
