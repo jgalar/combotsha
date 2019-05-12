@@ -54,8 +54,13 @@ class Repository:
             for commit in self._repo.iter_commits('origin/master'):
                 self._last_seen_commit_sha = commit.hexsha
                 return []
+        try:
+            self._repo.remotes.origin.fetch()
+        except git.exc.GitCommandError:
+            # Typically this means the host could not be resolved
+            # Return an empty list and try again later
+            return []
 
-        self._repo.remotes.origin.fetch()
         new_commits = []
         for commit in self._repo.iter_commits('origin/master'):
             if commit.hexsha.startswith(self._last_seen_commit_sha):
