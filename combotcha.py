@@ -56,7 +56,7 @@ class Repository:
                 return []
         try:
             self._repo.remotes.origin.fetch()
-        except git.exc.GitCommandError:
+        except (git.exc.GitCommandError, git.exc.BadName):
             # Typically this means the host could not be resolved
             # Return an empty list and try again later
             return []
