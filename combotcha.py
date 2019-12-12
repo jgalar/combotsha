@@ -212,10 +212,15 @@ while True:
             "{} new commits found for {} repository".format(len(new_commits), repo.name)
         )
         session.message_channel("{} ({})".format(repo.name, len(new_commits)))
+        rate_limit = False
+        if len(new_commits) > 5:
+            rate_limit = True
         for commit in new_commits:
             session.message_channel(
                 "\x0307{} \x0300{} \x0303[{}]".format(
                     commit.hexsha[:8], commit.summary, commit.author.name
                 )
             )
+            if rate_limit:
+                time.sleep(1)
     time.sleep(10)
