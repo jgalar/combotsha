@@ -168,59 +168,61 @@ class IRCSession:
             self._handle_message(self._receive())
 
 
-if len(sys.argv) != 2:
-    print("Usage: combotcha config.json")
-    sys.exit(1)
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: combotcha config.json")
+        sys.exit(1)
 
-cfg = None
-with open(sys.argv[1]) as cfg_file:
-    cfg = json.load(cfg_file)
+    cfg = None
+    with open(sys.argv[1]) as cfg_file:
+        cfg = json.load(cfg_file)
 
-irc_cfg = cfg["irc"]
-session = IRCSession(
-    irc_cfg["url"], irc_cfg["port"], irc_cfg["channel"], irc_cfg["nick"]
-)
-session.sign_in()
-
-repos = []
-repos_cfg = cfg["repos"]
-for repo_cfg in repos_cfg:
-    repo = Repository(
-        repo_cfg["name"], repo_cfg["url"], repo_cfg.get("last_seen_commit_sha", None)
+    irc_cfg = cfg["irc"]
+    session = IRCSession(
+        irc_cfg["url"], irc_cfg["port"], irc_cfg["channel"], irc_cfg["nick"]
     )
-    repos.append(repo)
+    session.sign_in()
 
-
-def sigint_handler(sig, frame):
-    session.quit()
-    sys.exit(0)
-
-
-signal.signal(signal.SIGINT, sigint_handler)
-
-print("Launching IRC thread")
-irc_thread = threading.Thread(target=session.run)
-irc_thread.start()
-
-while True:
-    for repo in repos:
-        new_commits = repo.get_new_commits()
-        if not new_commits:
-            continue
-
-        print(
-            "{} new commits found for {} repository".format(len(new_commits), repo.name)
+    repos = []
+    repos_cfg = cfg["repos"]
+    for repo_cfg in repos_cfg:
+        repo = Repository(
+            repo_cfg["name"], repo_cfg["url"], repo_cfg.get("last_seen_commit_sha", None)
         )
-        session.message_channel("{} ({})".format(repo.name, len(new_commits)))
-        rate_limit = False
-        if len(new_commits) > 5:
-            rate_limit = True
-        for commit in new_commits:
-            session.message_channel(
-                "\x0307{} \x0300{} \x0303[{}]".format(
-                    commit.hexsha[:8], commit.summary, commit.author.name
-                )
+        repos.append(repo)
+
+
+    def sigint_handler(sig, frame):
+        session.quit()
+        sys.exit(0)
+
+
+    signal.signal(signal.SIGINT, sigint_handler)
+
+    print("Launching IRC thread")
+    irc_thread = threading.Thread(target=session.run)
+    irc_thread.start()
+
+    while True:
+        for repo in repos:
+            new_commits = repo.get_new_commits()
+            if not new_commits:
+                continue
+
+            print(
+                "{} new commits found for {} repository".format(len(new_commits), repo.name)
             )
-            if rate_limit:
-                time.sleep(1)
-    time.sleep(10)
+            session.message_channel("{} ({})".format(repo.name, len(new_commits)))
+            rate_limit = False
+            if len(new_commits) > 5:
+                rate_limit = True
+            for commit in new_commits:
+                session.message_channel(
+                    "\x0307{} \x0300{} \x0303[{}]".format(
+                        commit.hexsha[:8], commit.summary, commit.author.name
+                    )
+                )
+                if rate_limit:
+                    time.sleep(1)
+
+        time.sleep(10)
