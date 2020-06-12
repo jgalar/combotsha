@@ -152,7 +152,7 @@ class IRCSession:
                 self._identify(self._nickname)
             elif status == 433:
                 print("Nickname already in use... BYYYYYYE!")
-                session.quit()
+                self.quit()
                 raise self.NicknameInUse
             elif status == 376:
                 self._join_channel(self._channel)
