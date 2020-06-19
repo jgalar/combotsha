@@ -187,15 +187,15 @@ def main():
     repos_cfg = cfg["repos"]
     for repo_cfg in repos_cfg:
         repo = Repository(
-            repo_cfg["name"], repo_cfg["url"], repo_cfg.get("last_seen_commit_sha", None)
+            repo_cfg["name"],
+            repo_cfg["url"],
+            repo_cfg.get("last_seen_commit_sha", None),
         )
         repos.append(repo)
-
 
     def sigint_handler(sig, frame):
         session.quit()
         sys.exit(0)
-
 
     signal.signal(signal.SIGINT, sigint_handler)
 
@@ -210,7 +210,9 @@ def main():
                 continue
 
             print(
-                "{} new commits found for {} repository".format(len(new_commits), repo.name)
+                "{} new commits found for {} repository".format(
+                    len(new_commits), repo.name
+                )
             )
             session.message_channel("{} ({})".format(repo.name, len(new_commits)))
             rate_limit = False
