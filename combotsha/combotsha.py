@@ -46,13 +46,21 @@ def _format_commit(
     after_summary='',
     before_author='',
     after_author='',
+    before_insertions='',
+    after_insertions='',
+    before_deletions='',
+    after_deletions='',
 ):
     dt_str = commit.authored_datetime.strftime('%Y-%m-%d %H:%M')
     dt = f'{before_dt}{dt_str}{after_dt}'
     hash = f'{before_hash}{commit.hexsha[:8]}{after_hash}'
     summary = f'{before_summary}{commit.summary}{after_summary}'
     author = f'{before_author}{commit.author.name}{after_author}'
-    return f'{dt}: [{author}] {hash} {summary}'
+    insertions = (
+        f'{before_insertions}+{commit.stats.total["insertions"]}{after_insertions}'
+    )
+    deletions = f'{before_deletions}-{commit.stats.total["deletions"]}{after_deletions}'
+    return f'{dt}: [{author}] {hash} {summary} ({insertions} {deletions})'
 
 
 class _Repository:
@@ -243,6 +251,10 @@ def _main():
                 after_summary='\x0f',
                 before_author='\x0303',
                 after_author='\x0f',
+                before_insertions='\x02\x0309',
+                after_insertions='\x0f',
+                before_deletions='\x02\x0304',
+                after_deletions='\x0f',
             )
 
             irc_bot.msg_channel(f'\x02{repo.name}\x0f: {commit_str}')
