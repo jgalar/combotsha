@@ -165,7 +165,7 @@ def _configure_logging():
     )
 
 
-def main():
+def _main():
     def fatal_error(msg):
         logger.setLevel(logging.CRITICAL)
         logger.critical(msg)

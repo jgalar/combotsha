@@ -43,7 +43,7 @@ requires = ['poetry>=0.12']
 build-backend = 'poetry.masonry.api'
 
 [tool.poetry.scripts]
-combotsha = 'combotsha.combotsha:main'
+combotsha = 'combotsha.combotsha:_main'
 
 [tool.black]
 skip-string-normalization = true
