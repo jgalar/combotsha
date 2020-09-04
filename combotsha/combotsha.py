@@ -33,6 +33,19 @@ import glob
 import git
 import irc
 import irc.bot
+def _format_commit(
+    commit,
+    before_hash='',
+    after_hash='',
+    before_summary='',
+    after_summary='',
+    before_author='',
+    after_author='',
+):
+    hash = f'{before_hash}{commit.hexsha[:8]}{after_hash}'
+    summary = f'{before_summary}{commit.summary}{after_summary}'
+    author = f'{before_author}{commit.author.name}{after_author}'
+    return f'{hash} {summary} [{author}]'
 
 
 class _Repository:
@@ -158,8 +171,14 @@ def main():
                 rate_limit = True
             for commit in new_commits:
                 irc_bot.msg_channel(
-                    '\x0307{} \x0300{} \x0303[{}]'.format(
-                        commit.hexsha[:8], commit.summary, commit.author.name
+                    _format_commit(
+                        commit,
+                        before_hash='\x0307',
+                        after_hash='\x0f',
+                        before_summary='\x0300',
+                        after_summary='\x0f',
+                        before_author='\x0303',
+                        after_author='\x0f',
                     )
                 )
                 if rate_limit:
