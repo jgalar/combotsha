@@ -28,29 +28,30 @@ import time
 import yaml
 import tempfile
 import glob
-import git
-import git.exc
-import irc
-import irc.bot
+import git  # type: ignore
+import git.exc  # type: ignore
+import irc  # type: ignore
+import irc.bot  # type: ignore
 import logging
 import os
+from typing import Optional, Iterator, List, Mapping, Any, Union
 
 
 def _format_commit(
-    commit,
-    before_dt='',
-    after_dt='',
-    before_hash='',
-    after_hash='',
-    before_summary='',
-    after_summary='',
-    before_author='',
-    after_author='',
-    before_insertions='',
-    after_insertions='',
-    before_deletions='',
-    after_deletions='',
-):
+    commit: git.Commit,
+    before_dt: str = '',
+    after_dt: str = '',
+    before_hash: str = '',
+    after_hash: str = '',
+    before_summary: str = '',
+    after_summary: str = '',
+    before_author: str = '',
+    after_author: str = '',
+    before_insertions: str = '',
+    after_insertions: str = '',
+    before_deletions: str = '',
+    after_deletions: str = '',
+) -> str:
     dt_str = commit.authored_datetime.strftime('%Y-%m-%d %H:%M')
     dt = f'{before_dt}{dt_str}{after_dt}'
     hash = f'{before_hash}{commit.hexsha[:8]}{after_hash}'
@@ -64,7 +65,7 @@ def _format_commit(
 
 
 class _Repository:
-    def __init__(self, name, url, last_seen_commit_sha=None):
+    def __init__(self, name: str, url: str, last_seen_commit_sha: Optional[str] = None):
         self._logger = (
             logging.getLogger(__name__).getChild(self.__class__.__name__).getChild(name)
         )
@@ -88,14 +89,14 @@ class _Repository:
         )
 
     @property
-    def _commit_iter(self):
+    def _commit_iter(self) -> Iterator[git.Commit]:
         return self._repo.iter_commits('origin/master')
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._name
 
-    def get_new_commits(self):
+    def get_new_commits(self) -> List[git.Commit]:
         self._logger.debug('Fetching new commits.')
 
         try:
@@ -126,7 +127,7 @@ class _Repository:
 
 
 class _IrcBot(irc.bot.SingleServerIRCBot):
-    def __init__(self, channel_name, nick, server, port=6667):
+    def __init__(self, channel_name: str, nick: str, server: str, port: int = 6667):
         super().__init__([irc.bot.ServerSpec(server, port)], nick, nick)
         self._logger = logging.getLogger(__name__).getChild(self.__class__.__name__)
         self._logger.info(f'Creating IRC bot to connect to `{server}:{port}`.')
@@ -145,7 +146,7 @@ class _IrcBot(irc.bot.SingleServerIRCBot):
         self._connection = connection
         connection.join(self._channel_name)
 
-    def msg_channel(self, msg):
+    def msg_channel(self, msg: str):
         if self._connection is None:
             # not connected yet
             return
@@ -177,27 +178,25 @@ def _configure_logging():
 
 
 def _main():
-    def fatal_error(msg):
+    def fatal_error(msg: str):
         logger.setLevel(logging.CRITICAL)
         logger.critical(msg)
         sys.exit(1)
 
-    def create_repos():
+    def create_repos() -> List[_Repository]:
         cfg_repos = cfg['repos']
         repos = []
 
         for repo_cfg in cfg_repos:
             repos.append(
                 _Repository(
-                    repo_cfg['name'],
-                    repo_cfg['url'],
-                    repo_cfg.get('last-commit-sha'),
+                    repo_cfg['name'], repo_cfg['url'], repo_cfg.get('last-commit-sha'),
                 )
             )
 
         return repos
 
-    def create_irc_bot():
+    def create_irc_bot() -> _IrcBot:
         cfg_irc = cfg['irc']
         irc_bot = _IrcBot(
             cfg_irc['channel'],
@@ -210,7 +209,7 @@ def _main():
         irc_thread.start()
         return irc_bot
 
-    def create_config():
+    def create_config() -> Mapping[str, Any]:
         if len(sys.argv) != 2:
             fatal_error('Missing YAML configuration file path.')
 
@@ -235,12 +234,12 @@ def _main():
     irc_bot = create_irc_bot()
     configure_signals()
 
-    def sleep(duration):
+    def sleep(duration: Union[int, float]):
         logger.debug(f'Sleeping {duration} seconds.')
         time.sleep(duration)
 
-    def check_repo_new_commits(repo):
-        def msg_commit(commit):
+    def check_repo_new_commits(repo: _Repository):
+        def msg_commit(commit: git.Commit):
             commit_str = _format_commit(
                 commit,
                 before_dt='\x02\x0312',
