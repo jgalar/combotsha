@@ -25,7 +25,7 @@ import sys
 import signal
 import threading
 import time
-import json
+import yaml
 import tempfile
 import glob
 import git
@@ -197,13 +197,13 @@ def _main():
 
     def create_config():
         if len(sys.argv) != 2:
-            fatal_error('Missing JSON configuration file path.')
+            fatal_error('Missing YAML configuration file path.')
 
         cfg_file_name = sys.argv[1]
         logger.info(f'Loading configuration file `{cfg_file_name}`.')
 
         with open(cfg_file_name) as cfg_file:
-            return json.load(cfg_file)
+            return yaml.load(cfg_file, Loader=yaml.Loader)
 
     def configure_signals():
         def sigint_handler(sig, frame):
