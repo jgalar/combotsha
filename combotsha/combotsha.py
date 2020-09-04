@@ -229,17 +229,17 @@ def _main():
 
     def check_repo_new_commits(repo):
         def msg_commit(commit):
-            irc_bot.msg_channel(
-                _format_commit(
-                    commit,
-                    before_hash='\x0307',
-                    after_hash='\x0f',
-                    before_summary='\x0300',
-                    after_summary='\x0f',
-                    before_author='\x0303',
-                    after_author='\x0f',
-                )
+            commit_str = _format_commit(
+                commit,
+                before_hash='\x0307',
+                after_hash='\x0f',
+                before_summary='\x0300',
+                after_summary='\x0f',
+                before_author='\x0303',
+                after_author='\x0f',
             )
+
+            irc_bot.msg_channel(f'\x02{repo.name}\x0f: {commit_str}')
 
         logging.debug(f'Getting new commits for repository {repo.name}.')
         new_commits = repo.get_new_commits()
@@ -247,7 +247,6 @@ def _main():
         if len(new_commits) == 0:
             return
 
-        irc_bot.msg_channel('{} ({})'.format(repo.name, len(new_commits)))
         rate_limit = False
 
         if len(new_commits) > 5:
