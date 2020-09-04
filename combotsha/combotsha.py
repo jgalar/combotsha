@@ -122,7 +122,7 @@ class _Repository:
                 f'New last seen commit is: {_format_commit(self._last_seen_commit)}.'
             )
 
-        return new_commits
+        return list(reversed(new_commits))
 
 
 class _IrcBot(irc.bot.SingleServerIRCBot):
