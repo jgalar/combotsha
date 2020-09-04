@@ -38,6 +38,8 @@ import os
 
 def _format_commit(
     commit,
+    before_dt='',
+    after_dt='',
     before_hash='',
     after_hash='',
     before_summary='',
@@ -45,10 +47,12 @@ def _format_commit(
     before_author='',
     after_author='',
 ):
+    dt_str = commit.authored_datetime.strftime('%Y-%m-%d %H:%M')
+    dt = f'{before_dt}{dt_str}{after_dt}'
     hash = f'{before_hash}{commit.hexsha[:8]}{after_hash}'
     summary = f'{before_summary}{commit.summary}{after_summary}'
     author = f'{before_author}{commit.author.name}{after_author}'
-    return f'{hash} {summary} [{author}]'
+    return f'{dt}: [{author}] {hash} {summary}'
 
 
 class _Repository:
@@ -231,9 +235,11 @@ def _main():
         def msg_commit(commit):
             commit_str = _format_commit(
                 commit,
+                before_dt='\x02\x0312',
+                after_dt='\x0f',
                 before_hash='\x0307',
                 after_hash='\x0f',
-                before_summary='\x0300',
+                before_summary='\x0f',
                 after_summary='\x0f',
                 before_author='\x0303',
                 after_author='\x0f',
