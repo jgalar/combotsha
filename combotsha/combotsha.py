@@ -43,9 +43,9 @@ class Repository:
         self._repo = None
         self._last_seen_commit_sha = last_seen_commit_sha
 
-        print("Cloning " + self._name)
+        print('Cloning ' + self._name)
         git.Git(self._directory.name).clone(self._url)
-        self._repo = git.Repo(glob.glob(self._directory.name + "/*/")[0])
+        self._repo = git.Repo(glob.glob(self._directory.name + '/*/')[0])
 
     @property
     def name(self):
@@ -53,7 +53,7 @@ class Repository:
 
     def get_new_commits(self):
         if self._last_seen_commit_sha is None:
-            for commit in self._repo.iter_commits("origin/master"):
+            for commit in self._repo.iter_commits('origin/master'):
                 self._last_seen_commit_sha = commit.hexsha
                 return []
         try:
@@ -64,7 +64,7 @@ class Repository:
             return []
 
         new_commits = []
-        for commit in self._repo.iter_commits("origin/master"):
+        for commit in self._repo.iter_commits('origin/master'):
             if commit.hexsha.startswith(self._last_seen_commit_sha):
                 break
             new_commits.append(commit)
@@ -80,7 +80,7 @@ class _IrcBot(irc.bot.SingleServerIRCBot):
         self._connection = None
 
     def on_nicknameinuse(self, connection, _):
-        connection.nick(f"{connection.get_nickname()}_")
+        connection.nick(f'{connection.get_nickname()}_')
 
     def on_welcome(self, connection, _):
         self._connection = connection
@@ -103,25 +103,25 @@ class _IrcBot(irc.bot.SingleServerIRCBot):
 
 def main():
     if len(sys.argv) != 2:
-        print("Usage: combotcha config.json")
+        print('Usage: combotcha config.json')
         sys.exit(1)
 
     cfg = None
     with open(sys.argv[1]) as cfg_file:
         cfg = json.load(cfg_file)
 
-    irc_cfg = cfg["irc"]
+    irc_cfg = cfg['irc']
     irc_bot = _IrcBot(
-        irc_cfg["channel"], irc_cfg["nick"], irc_cfg["url"], irc_cfg["port"]
+        irc_cfg['channel'], irc_cfg['nick'], irc_cfg['url'], irc_cfg['port']
     )
 
     repos = []
-    repos_cfg = cfg["repos"]
+    repos_cfg = cfg['repos']
     for repo_cfg in repos_cfg:
         repo = Repository(
-            repo_cfg["name"],
-            repo_cfg["url"],
-            repo_cfg.get("last_seen_commit_sha", None),
+            repo_cfg['name'],
+            repo_cfg['url'],
+            repo_cfg.get('last_seen_commit_sha', None),
         )
         repos.append(repo)
 
@@ -131,7 +131,7 @@ def main():
 
     signal.signal(signal.SIGINT, sigint_handler)
 
-    print("Launching IRC thread")
+    print('Launching IRC thread')
     irc_thread = threading.Thread(target=irc_bot.start)
     irc_thread.start()
 
@@ -142,17 +142,17 @@ def main():
                 continue
 
             print(
-                "{} new commits found for {} repository".format(
+                '{} new commits found for {} repository'.format(
                     len(new_commits), repo.name
                 )
             )
-            irc_bot.msg_channel("{} ({})".format(repo.name, len(new_commits)))
+            irc_bot.msg_channel('{} ({})'.format(repo.name, len(new_commits)))
             rate_limit = False
             if len(new_commits) > 5:
                 rate_limit = True
             for commit in new_commits:
                 irc_bot.msg_channel(
-                    "\x0307{} \x0300{} \x0303[{}]".format(
+                    '\x0307{} \x0300{} \x0303[{}]'.format(
                         commit.hexsha[:8], commit.summary, commit.author.name
                     )
                 )
