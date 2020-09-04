@@ -33,6 +33,10 @@ import glob
 import git
 import irc
 import irc.bot
+import logging
+import os
+
+
 def _format_commit(
     commit,
     before_hash='',
@@ -50,10 +54,16 @@ def _format_commit(
 
 class _Repository:
     def __init__(self, name, url, last_seen_commit_sha=None):
+        self._logger = (
+            logging.getLogger(__name__).getChild(self.__class__.__name__).getChild(name)
+        )
+        self._logger.info('Creating repository object.')
         self._name = name
         self._url = url
-        print(f'Cloning {self._name}')
         self._directory = tempfile.TemporaryDirectory()
+        self._logger.info(
+            f'Cloning Git repository `{url}` within `{self._directory.name}`.'
+        )
         git.Git(self._directory.name).clone(self._url)
         self._repo = git.Repo(glob.glob(f'{self._directory.name}/*/')[0])
 
@@ -61,6 +71,10 @@ class _Repository:
             self._last_seen_commit = self._repo.commit(last_seen_commit_sha)
         else:
             self._last_seen_commit = next(self._commit_iter)
+
+        self._logger.info(
+            f'Last seen commit is: {_format_commit(self._last_seen_commit)}.'
+        )
 
     @property
     def _commit_iter(self):
@@ -71,11 +85,14 @@ class _Repository:
         return self._name
 
     def get_new_commits(self):
+        self._logger.debug('Fetching new commits.')
+
         try:
             self._repo.remotes.origin.fetch()
-        except (git.exc.GitCommandError, git.exc.BadName):
+        except (git.exc.GitCommandError, git.exc.BadName) as exc:
             # Typically, this means the host could not be resolved;
             # return an empty list and try again later.
+            self._logger.error(f'Git error: {exc}')
             return []
 
         new_commits = []
@@ -86,8 +103,13 @@ class _Repository:
 
             new_commits.append(commit)
 
+        self._logger.debug(f'Found {len(new_commits)} new commits.')
+
         if len(new_commits) > 0:
             self._last_seen_commit = new_commits[0]
+            self._logger.info(
+                f'New last seen commit is: {_format_commit(self._last_seen_commit)}.'
+            )
 
         return new_commits
 
@@ -95,13 +117,20 @@ class _Repository:
 class _IrcBot(irc.bot.SingleServerIRCBot):
     def __init__(self, channel_name, nick, server, port=6667):
         super().__init__([irc.bot.ServerSpec(server, port)], nick, nick)
+        self._logger = logging.getLogger(__name__).getChild(self.__class__.__name__)
+        self._logger.info(f'Creating IRC bot to connect to `{server}:{port}`.')
         self._channel_name = channel_name
         self._connection = None
 
     def on_nicknameinuse(self, connection, _):
-        connection.nick(f'{connection.get_nickname()}_')
+        new_nick = f'{connection.get_nickname()}_'
+        self._logger.info(f'Nick in use: trying `{new_nick}`.')
+        connection.nick(new_nick)
 
     def on_welcome(self, connection, _):
+        self._logger.info(
+            f'Connected to server: joining channel `{self._channel_name}`'
+        )
         self._connection = connection
         connection.join(self._channel_name)
 
@@ -110,6 +139,7 @@ class _IrcBot(irc.bot.SingleServerIRCBot):
             # not connected yet
             return
 
+        self._logger.info(f'Sending private message to channel `{self._channel_name}`.')
         self._connection.privmsg(self._channel_name, msg)
 
     def disconnect(self):
@@ -117,16 +147,44 @@ class _IrcBot(irc.bot.SingleServerIRCBot):
             # not connected yet
             return
 
+        self._logger.info('Disconnecting.')
         self._connection.disconnect()
 
 
+def _configure_logging():
+    level = {
+        'C': logging.CRITICAL,
+        'E': logging.ERROR,
+        'W': logging.WARNING,
+        'I': logging.INFO,
+        'D': logging.DEBUG,
+        'N': logging.NOTSET,
+    }[os.environ.get('COMBOTSHA_LOG_LEVEL', 'I')]
+    logging.basicConfig(
+        level=level, format='{asctime} [{levelname}] {name}: {message}', style='{'
+    )
+
+
 def main():
-    if len(sys.argv) != 2:
-        print('Usage: combotcha config.json')
+    def fatal_error(msg):
+        logger.setLevel(logging.CRITICAL)
+        logger.critical(msg)
         sys.exit(1)
 
+    def sleep(duration):
+        logger.debug(f'Sleeping {duration} seconds.')
+        time.sleep(duration)
+
+    _configure_logging()
+    logger = logging.getLogger(__name__).getChild('main')
+
+    if len(sys.argv) != 2:
+        fatal_error('Missing JSON configuration file path.')
+
     cfg = None
-    with open(sys.argv[1]) as cfg_file:
+    cfg_file_name = sys.argv[1]
+    logger.info(f'Loading configuration file `{cfg_file_name}`.')
+    with open(cfg_file_name) as cfg_file:
         cfg = json.load(cfg_file)
 
     irc_cfg = cfg['irc']
@@ -145,26 +203,23 @@ def main():
         repos.append(repo)
 
     def sigint_handler(sig, frame):
+        logger.info('Got SIGINT.')
         irc_bot.disconnect()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, sigint_handler)
 
-    print('Launching IRC thread')
+    logger.info('Starting IRC bot thread.')
     irc_thread = threading.Thread(target=irc_bot.start)
     irc_thread.start()
 
     while True:
         for repo in repos:
+            logging.debug(f'Getting new commits for repository {repo.name}.')
             new_commits = repo.get_new_commits()
             if not new_commits:
                 continue
 
-            print(
-                '{} new commits found for {} repository'.format(
-                    len(new_commits), repo.name
-                )
-            )
             irc_bot.msg_channel('{} ({})'.format(repo.name, len(new_commits)))
             rate_limit = False
             if len(new_commits) > 5:
@@ -182,6 +237,6 @@ def main():
                     )
                 )
                 if rate_limit:
-                    time.sleep(1)
+                    sleep(1)
 
-        time.sleep(10)
+        sleep(10)
