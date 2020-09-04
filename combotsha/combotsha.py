@@ -171,72 +171,94 @@ def main():
         logger.critical(msg)
         sys.exit(1)
 
+    def create_repos():
+        cfg_repos = cfg['repos']
+        repos = []
+
+        for repo_cfg in cfg_repos:
+            repos.append(
+                _Repository(
+                    repo_cfg['name'],
+                    repo_cfg['url'],
+                    repo_cfg.get('last_seen_commit_sha'),
+                )
+            )
+
+        return repos
+
+    def create_irc_bot():
+        cfg_irc = cfg['irc']
+        irc_bot = _IrcBot(
+            cfg_irc['channel'], cfg_irc['nick'], cfg_irc['url'], cfg_irc['port']
+        )
+        logger.info('Starting IRC bot thread.')
+        irc_thread = threading.Thread(target=irc_bot.start)
+        irc_thread.start()
+        return irc_bot
+
+    def create_config():
+        if len(sys.argv) != 2:
+            fatal_error('Missing JSON configuration file path.')
+
+        cfg_file_name = sys.argv[1]
+        logger.info(f'Loading configuration file `{cfg_file_name}`.')
+
+        with open(cfg_file_name) as cfg_file:
+            return json.load(cfg_file)
+
+    def configure_signals():
+        def sigint_handler(sig, frame):
+            logger.info('Got SIGINT.')
+            irc_bot.disconnect()
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, sigint_handler)
+
+    _configure_logging()
+    logger = logging.getLogger(__name__).getChild('main')
+    cfg = create_config()
+    repos = create_repos()
+    irc_bot = create_irc_bot()
+    configure_signals()
+
     def sleep(duration):
         logger.debug(f'Sleeping {duration} seconds.')
         time.sleep(duration)
 
-    _configure_logging()
-    logger = logging.getLogger(__name__).getChild('main')
+    def check_repo_new_commits(repo):
+        def msg_commit(commit):
+            irc_bot.msg_channel(
+                _format_commit(
+                    commit,
+                    before_hash='\x0307',
+                    after_hash='\x0f',
+                    before_summary='\x0300',
+                    after_summary='\x0f',
+                    before_author='\x0303',
+                    after_author='\x0f',
+                )
+            )
 
-    if len(sys.argv) != 2:
-        fatal_error('Missing JSON configuration file path.')
+        logging.debug(f'Getting new commits for repository {repo.name}.')
+        new_commits = repo.get_new_commits()
 
-    cfg = None
-    cfg_file_name = sys.argv[1]
-    logger.info(f'Loading configuration file `{cfg_file_name}`.')
-    with open(cfg_file_name) as cfg_file:
-        cfg = json.load(cfg_file)
+        if len(new_commits) == 0:
+            return
 
-    irc_cfg = cfg['irc']
-    irc_bot = _IrcBot(
-        irc_cfg['channel'], irc_cfg['nick'], irc_cfg['url'], irc_cfg['port']
-    )
+        irc_bot.msg_channel('{} ({})'.format(repo.name, len(new_commits)))
+        rate_limit = False
 
-    repos = []
-    repos_cfg = cfg['repos']
-    for repo_cfg in repos_cfg:
-        repo = _Repository(
-            repo_cfg['name'],
-            repo_cfg['url'],
-            repo_cfg.get('last_seen_commit_sha', None),
-        )
-        repos.append(repo)
+        if len(new_commits) > 5:
+            rate_limit = True
 
-    def sigint_handler(sig, frame):
-        logger.info('Got SIGINT.')
-        irc_bot.disconnect()
-        sys.exit(0)
+        for commit in new_commits:
+            msg_commit(commit)
 
-    signal.signal(signal.SIGINT, sigint_handler)
-
-    logger.info('Starting IRC bot thread.')
-    irc_thread = threading.Thread(target=irc_bot.start)
-    irc_thread.start()
+            if rate_limit:
+                sleep(1)
 
     while True:
         for repo in repos:
-            logging.debug(f'Getting new commits for repository {repo.name}.')
-            new_commits = repo.get_new_commits()
-            if not new_commits:
-                continue
-
-            irc_bot.msg_channel('{} ({})'.format(repo.name, len(new_commits)))
-            rate_limit = False
-            if len(new_commits) > 5:
-                rate_limit = True
-            for commit in new_commits:
-                irc_bot.msg_channel(
-                    _format_commit(
-                        commit,
-                        before_hash='\x0307',
-                        after_hash='\x0f',
-                        before_summary='\x0300',
-                        after_summary='\x0f',
-                        before_author='\x0303',
-                        after_author='\x0f',
-                    )
-                )
-                if rate_limit:
-                    sleep(1)
+            check_repo_new_commits(repo)
 
         sleep(10)
