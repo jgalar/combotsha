@@ -191,7 +191,7 @@ def _main():
                 _Repository(
                     repo_cfg['name'],
                     repo_cfg['url'],
-                    repo_cfg.get('last_seen_commit_sha'),
+                    repo_cfg.get('last-commit-sha'),
                 )
             )
 
