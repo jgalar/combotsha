@@ -188,7 +188,10 @@ def _main():
     def create_irc_bot():
         cfg_irc = cfg['irc']
         irc_bot = _IrcBot(
-            cfg_irc['channel'], cfg_irc['nick'], cfg_irc['url'], cfg_irc['port']
+            cfg_irc['channel'],
+            cfg_irc.get('nick', 'combotsha'),
+            cfg_irc['url'],
+            cfg_irc.get('port', 6667),
         )
         logger.info('Starting IRC bot thread.')
         irc_thread = threading.Thread(target=irc_bot.start)
