@@ -31,6 +31,8 @@ import re
 import tempfile
 import glob
 import git
+import irc
+import irc.bot
 
 
 class Repository:
@@ -71,100 +73,32 @@ class Repository:
         return new_commits
 
 
-class IRCSession:
-    class NicknameInUse(Exception):
-        pass
+class _IrcBot(irc.bot.SingleServerIRCBot):
+    def __init__(self, channel_name, nick, server, port=6667):
+        super().__init__([irc.bot.ServerSpec(server, port)], nick, nick)
+        self._channel_name = channel_name
+        self._connection = None
 
-    def __init__(self, server_url, server_port, channel_name, nickname):
-        print("Connecting to {}...".format(server_url))
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((server_url, server_port))
-        self._sock_send_lock = threading.Lock()
-        self._sock = sock
-        self._channel = channel_name
-        self._status_pattern = re.compile("^.* ([0-9][0-9][0-9]) .*")
-        self._reception_buffer = bytearray()
-        self._nickname = nickname
+    def on_nicknameinuse(self, connection, _):
+        connection.nick(f"{connection.get_nickname()}_")
 
-    def _send_command(self, cmd_name, cmd_payload):
-        payload = "{} {}\r\n".format(cmd_name, cmd_payload).encode("utf-8")
-        self._sock_send_lock.acquire()
-        try:
-            self._sock.send(payload)
-        finally:
-            self._sock_send_lock.release()
+    def on_welcome(self, connection, _):
+        self._connection = connection
+        connection.join(self._channel_name)
 
-    def _identify(self, nickname):
-        print("Identifying as " + nickname)
-        self._send_command("NICK", nickname)
-        self._send_command("USER", "{} * * :{}".format(nickname, nickname))
+    def msg_channel(self, msg):
+        if self._connection is None:
+            # not connected yet
+            return
 
-    def _join_channel(self, channel):
-        print("Joining " + channel)
-        self._send_command("JOIN", channel)
-        self._channel = channel
+        self._connection.privmsg(self._channel_name, msg)
 
-    def message_channel(self, msg):
-        self._send_command("PRIVMSG " + self._channel, ":" + msg)
+    def disconnect(self):
+        if self._connection is None:
+            # not connected yet
+            return
 
-    def _pop_message(self):
-        msg = None
-        if len(self._reception_buffer) > 1:
-            for i in range(1, len(self._reception_buffer)):
-                # Look for a message boundary (\r\n)
-                if self._reception_buffer[i - 1 : i + 1] == b"\r\n":
-                    msg = self._reception_buffer[: i - 1].decode("utf-8")
-                    del self._reception_buffer[: i + 1]
-                    break
-        return msg
-
-    def _receive(self):
-        while True:
-            msg = self._pop_message()
-            if msg is not None:
-                return msg
-            # Max message length, including CRLF, according to RFC 2812
-            self._reception_buffer += self._sock.recv(512)
-
-    def _pong(self, payload):
-        reply = payload.split(":")[1]
-        self._send_command("PONG", ":" + reply)
-
-    def quit(self):
-        self._send_command("QUIT", ":Bye-bye-bye-bye-bye-bye-bye!!")
-
-    def _get_payload_status(self, payload):
-        status = None
-        try:
-            m = self._status_pattern.match(payload)
-            status = int(m[1])
-        except:
-            pass
-        return status
-
-    def sign_in(self):
-        # Try to join server and channel
-        while True:
-            payload = self._receive()
-            status = self._get_payload_status(payload)
-            if "No Ident response" in payload:
-                self._identify(self._nickname)
-            elif status == 433:
-                print("Nickname already in use... BYYYYYYE!")
-                self.quit()
-                raise self.NicknameInUse
-            elif status == 376:
-                self._join_channel(self._channel)
-            elif status == 366:
-                break
-
-    def _handle_message(self, payload):
-        if "PING" in payload:
-            self._pong(payload)
-
-    def run(self):
-        while True:
-            self._handle_message(self._receive())
+        self._connection.disconnect()
 
 
 def main():
@@ -177,10 +111,9 @@ def main():
         cfg = json.load(cfg_file)
 
     irc_cfg = cfg["irc"]
-    session = IRCSession(
-        irc_cfg["url"], irc_cfg["port"], irc_cfg["channel"], irc_cfg["nick"]
+    irc_bot = _IrcBot(
+        irc_cfg["channel"], irc_cfg["nick"], irc_cfg["url"], irc_cfg["port"]
     )
-    session.sign_in()
 
     repos = []
     repos_cfg = cfg["repos"]
@@ -193,13 +126,13 @@ def main():
         repos.append(repo)
 
     def sigint_handler(sig, frame):
-        session.quit()
+        irc_bot.disconnect()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, sigint_handler)
 
     print("Launching IRC thread")
-    irc_thread = threading.Thread(target=session.run)
+    irc_thread = threading.Thread(target=irc_bot.start)
     irc_thread.start()
 
     while True:
@@ -213,12 +146,12 @@ def main():
                     len(new_commits), repo.name
                 )
             )
-            session.message_channel("{} ({})".format(repo.name, len(new_commits)))
+            irc_bot.msg_channel("{} ({})".format(repo.name, len(new_commits)))
             rate_limit = False
             if len(new_commits) > 5:
                 rate_limit = True
             for commit in new_commits:
-                session.message_channel(
+                irc_bot.msg_channel(
                     "\x0307{} \x0300{} \x0303[{}]".format(
                         commit.hexsha[:8], commit.summary, commit.author.name
                     )
