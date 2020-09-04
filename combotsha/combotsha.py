@@ -190,7 +190,7 @@ def _main():
         irc_bot = _IrcBot(
             cfg_irc['channel'],
             cfg_irc.get('nick', 'combotsha'),
-            cfg_irc['url'],
+            cfg_irc['server'],
             cfg_irc.get('port', 6667),
         )
         logger.info('Starting IRC bot thread.')
