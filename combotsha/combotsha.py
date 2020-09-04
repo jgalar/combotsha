@@ -35,41 +35,47 @@ import irc
 import irc.bot
 
 
-class Repository:
+class _Repository:
     def __init__(self, name, url, last_seen_commit_sha=None):
         self._name = name
         self._url = url
+        print(f'Cloning {self._name}')
         self._directory = tempfile.TemporaryDirectory()
-        self._repo = None
-        self._last_seen_commit_sha = last_seen_commit_sha
-
-        print('Cloning ' + self._name)
         git.Git(self._directory.name).clone(self._url)
-        self._repo = git.Repo(glob.glob(self._directory.name + '/*/')[0])
+        self._repo = git.Repo(glob.glob(f'{self._directory.name}/*/')[0])
+
+        if last_seen_commit_sha is not None:
+            self._last_seen_commit = self._repo.commit(last_seen_commit_sha)
+        else:
+            self._last_seen_commit = next(self._commit_iter)
+
+    @property
+    def _commit_iter(self):
+        return self._repo.iter_commits('origin/master')
 
     @property
     def name(self):
         return self._name
 
     def get_new_commits(self):
-        if self._last_seen_commit_sha is None:
-            for commit in self._repo.iter_commits('origin/master'):
-                self._last_seen_commit_sha = commit.hexsha
-                return []
         try:
             self._repo.remotes.origin.fetch()
         except (git.exc.GitCommandError, git.exc.BadName):
-            # Typically this means the host could not be resolved
-            # Return an empty list and try again later
+            # Typically, this means the host could not be resolved;
+            # return an empty list and try again later.
             return []
 
         new_commits = []
-        for commit in self._repo.iter_commits('origin/master'):
-            if commit.hexsha.startswith(self._last_seen_commit_sha):
+
+        for commit in self._commit_iter:
+            if commit == self._last_seen_commit:
                 break
+
             new_commits.append(commit)
+
         if len(new_commits) > 0:
-            self._last_seen_commit_sha = new_commits[0].hexsha
+            self._last_seen_commit = new_commits[0]
+
         return new_commits
 
 
@@ -118,7 +124,7 @@ def main():
     repos = []
     repos_cfg = cfg['repos']
     for repo_cfg in repos_cfg:
-        repo = Repository(
+        repo = _Repository(
             repo_cfg['name'],
             repo_cfg['url'],
             repo_cfg.get('last_seen_commit_sha', None),
