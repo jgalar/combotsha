@@ -21,16 +21,15 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import socket
 import sys
 import signal
 import threading
 import time
 import json
-import re
 import tempfile
 import glob
 import git
+import git.exc
 import irc
 import irc.bot
 import logging
@@ -142,7 +141,7 @@ class _IrcBot(irc.bot.SingleServerIRCBot):
         self._logger.info(f'Sending private message to channel `{self._channel_name}`.')
         self._connection.privmsg(self._channel_name, msg)
 
-    def disconnect(self):
+    def disconnect_from_server(self):
         if self._connection is None:
             # not connected yet
             return
@@ -209,7 +208,7 @@ def _main():
     def configure_signals():
         def sigint_handler(sig, frame):
             logger.info('Got SIGINT.')
-            irc_bot.disconnect()
+            irc_bot.disconnect_from_server()
             sys.exit(0)
 
         signal.signal(signal.SIGINT, sigint_handler)
