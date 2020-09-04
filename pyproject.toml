@@ -44,3 +44,6 @@ build-backend = 'poetry.masonry.api'
 
 [tool.poetry.scripts]
 combotsha = 'combotsha.combotsha:main'
+
+[tool.black]
+skip-string-normalization = true
